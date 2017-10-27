@@ -11,8 +11,22 @@ from time import sleep
 # エンコードの設定
 sys.stdout = codecs.getwriter("utf-8")(sys.stdout)
 
+# 定数
 # 対象のURL
-TARGET_URL = 'https://192abc.com'
+TARGET_URL   = 'https://192abc.com'
+COLUMN_LIMIT = 20
+ALL = 'all_target'
+
+
+done_crawling = False
+one_category_crawling = False
+try:
+	target_category_url = sys.argv[1]
+	one_category_crawling = True
+except IndexError:
+	target_category_url = ALL
+
+print(target_category_url)
 
 # topページをクローリング
 top_r = requests.get(TARGET_URL)
@@ -23,18 +37,24 @@ top_soup = BeautifulSoup(top_r.text, 'lxml')
 # 内容
 output_bodies = []
 
+
 # start crawling
 # topページの下にある大カテゴリを取得します。
 for categories in top_soup.find_all(class_='top-list__footer'):
+	if done_crawling: break
+		
 	# Large categoryを取得
 	for large_categories in categories.find_all(class_='footer-tags-list'):
-		
+		if done_crawling: break
+
 		# 大カテゴリ
 		print('Large_category : ' + re.sub(u'の関連カテゴリ', '', large_categories.find('h2').text))
 		large_category = re.sub(u'の関連カテゴリ', '', large_categories.find('h2').text)
 		
 		# 大カテゴリ内の中カテゴリを取得します。
 		for mid_categories in large_categories.find_all(class_='footer-tags-list__wrap'):
+			if done_crawling: break
+
 			for mid_category_link in mid_categories.select('ul > li > a'):
 				
 				# 中カテゴリ
@@ -43,6 +63,10 @@ for categories in top_soup.find_all(class_='top-list__footer'):
 				
 				# 中カテゴリのリンク
 				mid_target_url = TARGET_URL + mid_category_link.get('href')
+				
+				if (target_category_url != ALL) and (target_category_url != mid_target_url):
+					break
+
 
 				is_last = False
 				page    = 0
@@ -105,41 +129,64 @@ for categories in top_soup.find_all(class_='top-list__footer'):
 							output_body.append('')
 							
 						# 記事内の関連リンク
-						output_related_links = []
+						i = 0
+						output_related_links = [''] * COLUMN_LIMIT
 						for related_link in art_soap.find_all(class_='related__link'):
+							output_related_links[i] = related_link.text
 							print('related link : ' + related_link.text)
-							output_related_links.append(related_link.text)
-							# print('related link : ' + related_link.get('href'))
-						output_body.append(output_related_links)
+							i += 1
+							if i >= COLUMN_LIMIT:
+								print('OUT!')
+								break
 
+						for link in output_related_links:
+							output_body.append(link)
+							pass
 
 						# 参考記事
-						output_reference_links = []
+						i = 0
+						output_reference_links = [''] * (COLUMN_LIMIT-5)
 						for reference_link in art_soap.find_all(class_='reference__link'):
+							output_reference_links[i] = reference_link.text
 							print('reference link : ' + reference_link.text)
-							output_reference_links.append(reference_link.text)
-							# print('reference link : ' + reference_link.get('href'))
-						output_body.append(output_reference_links)
-							
+							# output_reference_links.append(reference_link.text)
+							i += 1
+							if i >= COLUMN_LIMIT-5:
+								print('OUT!')
+								break
+
+						for link in output_reference_links:
+							output_body.append(link)
+							pass
+						
 						# 関連キーワード
-						output_related_kws = []
+						i = 0
+						output_related_kws = [''] * COLUMN_LIMIT
 						related_kws = art_soap.find(class_="related-tags")
 						for related_kw in related_kws.select('ul > li > a'):
+							output_related_kws[i] = related_kw.text
 							print('related kw : ' + related_kw.text)
-							output_related_kws.append(related_kw.text)
-							
-						output_body.append(output_related_kws)
-						
-						
-						output_bodies.append(output_body)
-						
-					# break
-				# break
-			# break
-		# break
-	# break
+							i += 1
+							if i >= COLUMN_LIMIT:
+								print('OUT!')
+								break
 
-columns=['記事URL', '記事タイトル', '大カテゴリ', '中カテゴリ' , '小カテゴリ', '記事監修 専門','記事監修 名前', '関連リンク', '参考記事', '関連キーワード']
+						print(output_related_kws)
+
+						for kw in output_related_kws:
+							output_body.append(kw)
+
+						output_bodies.append(output_body)
+					
+					if one_category_crawling:
+						done_crawling = True
+
+columns=[
+'記事URL', '記事タイトル', '大カテゴリ', '中カテゴリ' , '小カテゴリ', '記事監修 専門','記事監修 名前',
+'関連リンク'     , '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '',
+'参考記事'       , '', '', '', '', '', '', '', '', '', '', '', '', '', '',
+'関連キーワード' , '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''
+]
 now = datetime.now().strftime('%y%m%d')
 
 pandas.DataFrame(output_bodies, columns=columns).to_csv("192abccom_"+now+".csv",encoding='utf-8')
